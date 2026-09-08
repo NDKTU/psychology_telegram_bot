@@ -1,0 +1,90 @@
+services:
+  # ========================================================
+  # PostgreSQL Database Service
+  # Stores all messages, status (not_answered / answered), clients & workers
+  # ========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: psychology_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-psychology_bot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-psychology_bot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ========================================================
+  # 1. Client Bot Service
+  # Handles client incoming messages, questions, and forwards to workers
+  # ========================================================
+  client_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: psychology_client_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-psychology_bot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: python run_client.py
+
+  # ========================================================
+  # 2. Worker Bot Service
+  # Handles psychologist/specialist interactions and replies to clients
+  # ========================================================
+  worker_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: psychology_worker_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-psychology_bot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: python run_worker.py
+
+  # ========================================================
+  # 3. Optional Unified Runner (runs both bots in 1 container)
+  # Run with: docker compose --profile unified up -d
+  # ========================================================
+  all_bots:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: psychology_all_bots
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-psychology_bot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: python run.py
+    profiles:
+      - unified
+
+volumes:
+  postgres_data:
