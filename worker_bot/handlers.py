@@ -34,14 +34,14 @@ class WorkerReplyState(StatesGroup):
 def get_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Cancel Reply", callback_data="cancel_worker_reply")]
+            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_worker_reply")]
         ]
     )
 
 
 @worker_router.message(CommandStart())
 async def handle_worker_start(message: Message, state: FSMContext):
-    """Handle /start in worker bot with login check."""
+    """Handle /start in worker bot with login check in Uzbek."""
     user = message.from_user
     if not user:
         return
@@ -50,21 +50,21 @@ async def handle_worker_start(message: Message, state: FSMContext):
     already_worker = await db.is_worker(user.id)
     if already_worker:
         await message.answer(
-            f"🌿 <b>Welcome back, {html.escape(user.first_name or 'Specialist')}!</b> 🩺\n\n"
-            "You are logged in and active. You will receive all client inquiries here.\n\n"
-            "<b>Commands:</b>\n"
-            "• <code>/unanswered</code> - View all client inquiries waiting for a response\n"
-            "• <code>/reply &lt;client_id&gt; &lt;text&gt;</code> - Answer client by ID\n"
-            "• <code>/logout</code> - Sign out of your shift\n"
-            "• <code>/help</code> - Full instructions"
+            f"🌿 <b>Xush kelibsiz, {html.escape(user.first_name or 'Mutaxassis')}!</b> 🩺\n\n"
+            "Siz tizimga muvaffaqiyatli kirgansiz va faol holatdasiz. Barcha mijoz murojaatlari shu yerga keladi.\n\n"
+            "<b>Buyruqlar:</b>\n"
+            "• <code>/unanswered</code> - Kutilayotgan (javob berilmagan) murojaatlarni ko'rish\n"
+            "• <code>/reply &lt;mijoz_id&gt; &lt;javob&gt;</code> - Mijozga ID orqali javob berish\n"
+            "• <code>/logout</code> - Tizimdan (smenadan) chiqish\n"
+            "• <code>/help</code> - To'liq yo'riqnoma"
         )
         return
 
     # Prompt for admin login
     await state.set_state(WorkerLoginState.waiting_for_login)
     await message.answer(
-        "🔒 <b>Specialist / Admin Authorization Required</b>\n\n"
-        "Please enter your <b>Admin Login</b> to access the worker console:"
+        "🔒 <b>Mutaxassis / Administrator avtorizatsiyasi</b>\n\n"
+        "Ishchi konsoliga kirish uchun <b>Admin Login</b>ni kiriting:"
     )
 
 
@@ -74,7 +74,7 @@ async def handle_login_input(message: Message, state: FSMContext):
     login_text = message.text.strip() if message.text else ""
     await state.update_data(worker_login=login_text)
     await state.set_state(WorkerLoginState.waiting_for_password)
-    await message.answer("🔑 Enter your <b>Password</b>:")
+    await message.answer("🔑 <b>Parolingizni</b> kiriting:")
 
 
 @worker_router.message(WorkerLoginState.waiting_for_password)
@@ -99,17 +99,18 @@ async def handle_password_input(message: Message, state: FSMContext):
             first_name=user.first_name
         )
         await message.answer(
-            "✅ <b>Access Granted! Welcome to the Specialist Console.</b> 🩺🌿\n\n"
-            "You are now authenticated. All incoming client inquiries from the client bot "
-            "will be forwarded directly to your chat.\n\n"
-            "<b>Quick tips:</b>\n"
-            "• To reply to a client: use Telegram's <b>Reply</b> feature or tap <b>[ ✍️ Reply to Client ]</b>.\n"
-            "• Type <code>/unanswered</code> anytime to view pending questions."
+            "✅ <b>Ruxsat berildi! Mutaxassislar konsoliga xush kelibsiz.</b> 🩺🌿\n\n"
+            "Siz muvaffaqiyatli tizimga kirdingiz. Mijoz botidan yuborilgan barcha savol va xabarlar "
+            "to'g'ridan-to'g'ri sizga keladi.\n\n"
+            "<b>Qulayliklar:</b>\n"
+            "• Mijozga javob berish uchun: Telegram'ning <b>Reply</b> (javob) funksiyasidan foydalaning yoki "
+            "<b>[ ✍️ Mijozga javob berish ]</b> tugmasini bosing.\n"
+            "• Kutilayotgan savollarni ko'rish uchun istalgan vaqtda <code>/unanswered</code> buyrug'ini yuboring."
         )
     else:
         await message.answer(
-            "❌ <b>Incorrect Login or Password!</b> Access denied.\n\n"
-            "Please send <code>/start</code> or <code>/login</code> to try again."
+            "❌ <b>Login yoki parol noto'g'ri!</b> Kirish rad etildi.\n\n"
+            "Qayta urinish uchun <code>/start</code> yoki <code>/login</code> buyrug'ini yuboring."
         )
 
 
@@ -130,16 +131,16 @@ async def handle_login_command(message: Message, state: FSMContext):
                 first_name=user.first_name
             )
             await message.answer(
-                "✅ <b>Access Granted!</b> You are logged in as an active specialist."
+                "✅ <b>Ruxsat berildi!</b> Siz mutaxassis sifatida tizimga kirdingiz."
             )
             return
         else:
-            await message.answer("❌ <b>Incorrect Login or Password!</b>")
+            await message.answer("❌ <b>Login yoki parol noto'g'ri!</b>")
             return
 
     # Interactive login fallback
     await state.set_state(WorkerLoginState.waiting_for_login)
-    await message.answer("🔒 Please enter your <b>Admin Login</b>:")
+    await message.answer("🔒 <b>Admin Login</b>ni kiriting:")
 
 
 @worker_router.message(Command("logout"))
@@ -149,30 +150,30 @@ async def handle_worker_logout(message: Message):
     if user:
         await db.logout_worker(user.id)
         await message.answer(
-            "👋 <b>Logged Out Successfully.</b>\n"
-            "You will not receive client messages until you log back in via <code>/login</code>."
+            "👋 <b>Muvaffaqiyatli chiqildi.</b>\n"
+            "Qayta <code>/login</code> qilguningizcha mijoz xabarlari sizga kelmaydi."
         )
 
 
 @worker_router.message(Command("help"))
 async def handle_worker_help(message: Message):
-    """Display instructions for workers."""
+    """Display instructions for workers in Uzbek."""
     help_text = (
-        "📖 <b>Specialist Help & Instructions</b>\n\n"
-        "• <b>Authentication:</b>\n"
-        "  - <code>/login</code> - Log in with admin credentials\n"
-        "  - <code>/logout</code> - Sign out from receiving client inquiries\n\n"
-        "• <b>Replying to Clients:</b>\n"
-        "  - Use Telegram's <b>Reply</b> feature directly on the forwarded message.\n"
-        "  - Click the <b>✍️ Reply to Client</b> button.\n"
-        "  - Type <code>/reply &lt;client_id&gt; &lt;text&gt;</code>\n\n"
-        "• <b>Status Tracking & Tools:</b>\n"
-        "  - <code>/unanswered</code> - See all client inquiries marked as <i>not answered</i>.\n"
-        "  - Replies automatically transition status to <b>answered</b> in PostgreSQL.\n\n"
-        "• <b>Supported Message Types:</b>\n"
-        "  - Text\n"
-        "  - Voice messages (sent as voice notes to client)\n"
-        "  - Photos & Documents"
+        "📖 <b>Mutaxassis uchun yo'riqnoma va buyruqlar</b>\n\n"
+        "• <b>Avtorizatsiya:</b>\n"
+        "  - <code>/login</code> - Admin ma'lumotlari orqali kirish\n"
+        "  - <code>/logout</code> - Tizimdan chiqish (smenani yakunlash)\n\n"
+        "• <b>Mijozlarga javob berish usullari:</b>\n"
+        "  - Mijoz xabariga to'g'ridan-to'g'ri Telegram <b>Reply</b> (javob) qiling.\n"
+        "  - Xabar ostidagi <b>[ ✍️ Mijozga javob berish ]</b> tugmasini bosing.\n"
+        "  - <code>/reply &lt;mijoz_id&gt; &lt;javobingiz&gt;</code> buyrug'idan foydalaning.\n\n"
+        "• <b>Holat va hisobot:</b>\n"
+        "  - <code>/unanswered</code> - Hali <i>javob berilmagan</i> barcha murojaatlarni ko'rish.\n"
+        "  - Javob berishingiz bilan xabar holati avtomatik <b>Javob berildi</b> holatiga o'tadi.\n\n"
+        "• <b>Qo'llab-quvvatlanadigan formatlar:</b>\n"
+        "  - Matnli xabarlar\n"
+        "  - Ovozli xabarlar (mijozga ovozli xabar sifatida boradi)\n"
+        "  - Rasm va hujjatlar"
     )
     await message.answer(help_text)
 
@@ -182,12 +183,12 @@ async def handle_unanswered(message: Message):
     """List inquiries that are currently marked as 'not_answered'."""
     unanswered = await db.get_unanswered_messages(limit=15)
     if not unanswered:
-        await message.answer("🎉 <b>All caught up!</b>\nThere are no unanswered client inquiries at this moment.")
+        await message.answer("🎉 <b>Barcha murojaatlarga javob berilgan!</b>\nHozirda kutilayotgan savollar mavjud emas.")
         return
 
-    text = f"📋 <b>Unanswered Client Inquiries ({len(unanswered)})</b>\n\n"
+    text = f"📋 <b>Javob berilmagan mijoz murojaatlari ({len(unanswered)})</b>\n\n"
     for i, item in enumerate(unanswered, 1):
-        client_name = html.escape(item.get("first_name") or "Anonymous")
+        client_name = html.escape(item.get("first_name") or "Anonim")
         client_id = item.get("client_user_id")
         preview = html.escape(item.get("content") or f"[{item.get('message_type')}]")
         if len(preview) > 60:
@@ -196,7 +197,7 @@ async def handle_unanswered(message: Message):
         text += (
             f"<b>{i}.</b> 👤 {client_name} (ID: <code>{client_id}</code>)\n"
             f"   💬 <i>\"{preview}\"</i>\n"
-            f"   👉 Reply: <code>/reply {client_id} your_answer</code>\n\n"
+            f"   👉 Javob berish: <code>/reply {client_id} javobingiz</code>\n\n"
         )
 
     await message.answer(text)
@@ -209,7 +210,7 @@ async def handle_reply_callback(callback: CallbackQuery, state: FSMContext):
         _, client_id_str = callback.data.split(":")
         client_id = int(client_id_str)
     except (ValueError, IndexError):
-        await callback.answer("Invalid client ID.", show_alert=True)
+        await callback.answer("Mijoz ID si noto'g'ri.", show_alert=True)
         return
 
     await state.update_data(target_client_id=client_id)
@@ -217,8 +218,8 @@ async def handle_reply_callback(callback: CallbackQuery, state: FSMContext):
 
     await callback.answer()
     await callback.message.reply(
-        f"✍️ <b>Ready to reply to Client</b> (ID: <code>{client_id}</code>)\n\n"
-        "Please send your message now (text, voice note, or photo):",
+        f"✍️ <b>Mijozga javob yozish</b> (ID: <code>{client_id}</code>)\n\n"
+        "Iltimos, javob xabaringizni yuboring (matn, ovozli xabar yoki rasm):",
         reply_markup=get_cancel_keyboard()
     )
 
@@ -227,8 +228,8 @@ async def handle_reply_callback(callback: CallbackQuery, state: FSMContext):
 async def handle_cancel_reply(callback: CallbackQuery, state: FSMContext):
     """Cancel interactive reply."""
     await state.clear()
-    await callback.answer("Reply cancelled.")
-    await callback.message.edit_text("❌ Reply cancelled.")
+    await callback.answer("Bekor qilindi.")
+    await callback.message.edit_text("❌ Javob berish bekor qilindi.")
 
 
 @worker_router.message(WorkerReplyState.waiting_for_reply)
@@ -238,7 +239,7 @@ async def handle_fsm_reply_message(message: Message, state: FSMContext, client_b
     client_id = data.get("target_client_id")
     if not client_id:
         await state.clear()
-        await message.answer("Error: Client ID lost. Please click reply again.")
+        await message.answer("Xatolik: Mijoz ID topilmadi. Qaytadan urinib ko'ring.")
         return
 
     answer_text = extract_message_summary(message)
@@ -251,11 +252,11 @@ async def handle_fsm_reply_message(message: Message, state: FSMContext, client_b
             client_user_id=client_id
         )
         await message.reply(
-            f"✅ Your response has been delivered to client (ID: <code>{client_id}</code>).\n"
-            f"📌 Status updated to: <b>Answered</b>"
+            f"✅ Javobingiz mijozga (ID: <code>{client_id}</code>) yetkazildi.\n"
+            f"📌 Holat yangilandi: <b>Javob berildi</b>"
         )
     else:
-        await message.reply("⚠️ Failed to deliver message to client. The client may have blocked the bot.")
+        await message.reply("⚠️ Mijozga xabarni yetkazib bo'lmadi. Mijoz botni bloklagan bo'lishi mumkin.")
 
 
 @worker_router.message(Command("reply"))
@@ -263,20 +264,20 @@ async def handle_reply_command(message: Message, client_bot: Bot):
     """Handle /reply <client_id> <message> command."""
     args = message.text.split(maxsplit=2)
     if len(args) < 3:
-        await message.reply("Usage: <code>/reply &lt;client_id&gt; &lt;your message&gt;</code>")
+        await message.reply("Foydalanish: <code>/reply &lt;mijoz_id&gt; &lt;javobingiz&gt;</code>")
         return
 
     try:
         client_id = int(args[1])
         reply_text = args[2]
     except ValueError:
-        await message.reply("Error: client_id must be a valid number.")
+        await message.reply("Xatolik: mijoz_id raqam bo'lishi kerak.")
         return
 
     try:
         await client_bot.send_message(
             chat_id=client_id,
-            text=f"💬 <b>Response from Specialist:</b>\n\n{html.escape(reply_text)}"
+            text=f"💬 <b>Mutaxassisdan javob:</b>\n\n{html.escape(reply_text)}"
         )
         await db.mark_message_answered(
             worker_user_id=message.from_user.id if message.from_user else 0,
@@ -284,12 +285,12 @@ async def handle_reply_command(message: Message, client_bot: Bot):
             client_user_id=client_id
         )
         await message.reply(
-            f"✅ Delivered to client (ID: <code>{client_id}</code>).\n"
-            f"📌 Status updated to: <b>Answered</b>"
+            f"✅ Mijozga (ID: <code>{client_id}</code>) yetkazildi.\n"
+            f"📌 Holat yangilandi: <b>Javob berildi</b>"
         )
     except Exception as e:
         logger.error(f"Error sending /reply to {client_id}: {e}")
-        await message.reply(f"⚠️ Failed to deliver to client: {e}")
+        await message.reply(f"⚠️ Mijozga yetkazishda xatolik yuz berdi: {e}")
 
 
 @worker_router.message()
@@ -316,8 +317,8 @@ async def handle_worker_message_or_reply(message: Message, client_bot: Bot):
     if not client_id:
         if message.chat.type == "private":
             await message.reply(
-                "ℹ️ To answer a client, use Telegram's <b>Reply</b> on their message, "
-                "or click <b>[ ✍️ Reply to Client ]</b>, or type <code>/reply &lt;id&gt; &lt;text&gt;</code>."
+                "ℹ️ Mijozga javob berish uchun uning xabariga Telegram'da <b>Reply</b> (javob) qiling, "
+                "yoki <b>[ ✍️ Mijozga javob berish ]</b> tugmasini bosing, yoki <code>/reply &lt;id&gt; &lt;matn&gt;</code> deb yozing."
             )
         return
 
@@ -331,11 +332,11 @@ async def handle_worker_message_or_reply(message: Message, client_bot: Bot):
             client_user_id=client_id
         )
         await message.reply(
-            f"✅ Delivered to client (ID: <code>{client_id}</code>).\n"
-            f"📌 Status updated to: <b>Answered</b>"
+            f"✅ Javobingiz mijozga (ID: <code>{client_id}</code>) yetkazildi.\n"
+            f"📌 Holat yangilandi: <b>Javob berildi</b>"
         )
     else:
-        await message.reply(f"⚠️ Could not deliver message to client (ID: <code>{client_id}</code>).")
+        await message.reply(f"⚠️ Mijozga (ID: <code>{client_id}</code>) xabarni yetkazib bo'lmadi.")
 
 
 def extract_message_summary(message: Message) -> str:
@@ -343,18 +344,18 @@ def extract_message_summary(message: Message) -> str:
     if message.text:
         return message.text
     elif message.voice:
-        return f"[Voice Message ({message.voice.duration}s)]"
+        return f"[Ovozli xabar ({message.voice.duration}s)]"
     elif message.photo:
-        return f"[Photo] {message.caption or ''}".strip()
+        return f"[Rasm] {message.caption or ''}".strip()
     elif message.document:
-        return f"[Document: {message.document.file_name or 'file'}]"
-    return "[Media message]"
+        return f"[Hujjat: {message.document.file_name or 'fayl'}]"
+    return "[Media xabar]"
 
 
 async def send_content_to_client(message: Message, client_id: int, client_bot: Bot) -> bool:
     """Helper function to forward worker content (text, voice, photo, doc) to client."""
     try:
-        prefix = "💬 <b>Response from Specialist:</b>\n\n"
+        prefix = "💬 <b>Mutaxassisdan javob:</b>\n\n"
 
         if message.text:
             await client_bot.send_message(
@@ -370,7 +371,7 @@ async def send_content_to_client(message: Message, client_id: int, client_bot: B
             await client_bot.send_voice(
                 chat_id=client_id,
                 voice=input_file,
-                caption="💬 <i>Voice message from Specialist</i>"
+                caption="💬 <i>Mutaxassisdan ovozli xabar</i>"
             )
             return True
 
@@ -407,7 +408,7 @@ async def send_content_to_client(message: Message, client_id: int, client_bot: B
         else:
             await client_bot.send_message(
                 chat_id=client_id,
-                text=f"{prefix}[Unsupported media format sent by specialist]"
+                text=f"{prefix}[Qo'llab-quvvatlanmaydigan media format]"
             )
             return True
 

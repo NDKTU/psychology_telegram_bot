@@ -19,7 +19,7 @@ def get_worker_reply_keyboard(client_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✍️ Reply to Client",
+                    text="✍️ Mijozga javob berish",
                     callback_data=f"worker_reply:{client_id}"
                 )
             ]
@@ -38,7 +38,7 @@ async def get_worker_targets() -> List[int]:
 
 @client_router.message(CommandStart())
 async def handle_start(message: Message):
-    """Handle /start command from client."""
+    """Handle /start command from client in Uzbek."""
     user = message.from_user
     if user:
         await db.upsert_client(
@@ -49,11 +49,11 @@ async def handle_start(message: Message):
         )
 
     welcome_text = (
-        "<b>Welcome!</b> 🌿\n\n"
-        "This is a safe and confidential space for psychological support.\n"
-        "You can write your questions, feelings, or thoughts here anytime.\n\n"
-        "Our specialists will review your message and reply as soon as possible. "
-        "Feel free to write via text or send a voice message."
+        "<b>Xush kelibsiz!</b> 🌿\n\n"
+        "Bu psixologik yordam va qo'llab-quvvatlash uchun xavfsiz hamda maxfiy maskan.\n"
+        "Bu yerda o'z his-tuyg'ularingiz, fikrlaringiz yoki savollaringizni istalgan vaqtda yozib qoldirishingiz mumkin.\n\n"
+        "Mutaxassislarimiz xabaringizni ko'rib chiqib, imkon qadar tezroq javob berishadi. "
+        "Matnli yoki ovozli xabar ko'rinishida yuborishingiz mumkin."
     )
     await message.answer(welcome_text)
 
@@ -81,18 +81,18 @@ async def handle_client_text(message: Message, worker_bot: Bot):
 
     targets = await get_worker_targets()
     if not targets:
-        logger.warning("No workers currently logged in to receive messages!")
+        logger.warning("Hozirda tizimga kirgan mutaxassislar mavjud emas!")
 
-    username_str = f"@{user.username}" if user.username else "No username"
-    full_name = html.escape(user.full_name or "Anonymous")
+    username_str = f"@{user.username}" if user.username else "Username yo'q"
+    full_name = html.escape(user.full_name or "Anonim")
 
     worker_msg_text = (
-        f"📩 <b>New message from Client</b>\n"
-        f"👤 <b>Name:</b> {full_name}\n"
-        f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
+        f"📩 <b>Mijozdan yangi xabar</b>\n"
+        f"👤 <b>Ism:</b> {full_name}\n"
+        f"🆔 <b>Mijoz ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"📌 <b>Status:</b> ⏳ <i>Not answered</i>\n\n"
-        f"💬 <b>Message:</b>\n{html.escape(message.text)}"
+        f"📌 <b>Holat:</b> ⏳ <i>Javob berilmagan</i>\n\n"
+        f"💬 <b>Xabar:</b>\n{html.escape(message.text)}"
     )
 
     kb = get_worker_reply_keyboard(user.id)
@@ -114,7 +114,7 @@ async def handle_client_text(message: Message, worker_bot: Bot):
         except Exception as e:
             logger.error(f"Failed to deliver message to worker chat {chat_id}: {e}")
 
-    await message.answer("✅ Your message has been received. A specialist will answer you soon.")
+    await message.answer("✅ Xabaringiz qabul qilindi. Tez orada mutaxassis sizga javob beradi.")
 
 
 @client_router.message(F.voice)
@@ -135,20 +135,20 @@ async def handle_client_voice(message: Message, worker_bot: Bot):
         client_user_id=user.id,
         client_message_id=message.message_id,
         message_type="voice",
-        content=f"Voice message ({message.voice.duration}s)"
+        content=f"Ovozli xabar ({message.voice.duration}s)"
     )
 
     targets = await get_worker_targets()
-    full_name = html.escape(user.full_name or "Anonymous")
-    username_str = f"@{user.username}" if user.username else "No username"
+    full_name = html.escape(user.full_name or "Anonim")
+    username_str = f"@{user.username}" if user.username else "Username yo'q"
 
     caption = (
-        f"🎙 <b>New Voice Message from Client</b>\n"
-        f"👤 <b>Name:</b> {full_name}\n"
-        f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
+        f"🎙 <b>Mijozdan yangi ovozli xabar</b>\n"
+        f"👤 <b>Ism:</b> {full_name}\n"
+        f"🆔 <b>Mijoz ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"⏱ <b>Duration:</b> {message.voice.duration} seconds\n"
-        f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
+        f"⏱ <b>Davomiyligi:</b> {message.voice.duration} soniya\n"
+        f"📌 <b>Holat:</b> ⏳ <i>Javob berilmagan</i>"
     )
 
     voice_buffer = io.BytesIO()
@@ -176,7 +176,7 @@ async def handle_client_voice(message: Message, worker_bot: Bot):
         except Exception as e:
             logger.error(f"Failed to forward voice to worker chat {chat_id}: {e}")
 
-    await message.answer("✅ Your voice note has been received. A specialist will listen and respond.")
+    await message.answer("✅ Ovozli xabaringiz qabul qilindi. Mutaxassis eshitib ko'rib, javob beradi.")
 
 
 @client_router.message(F.photo)
@@ -197,22 +197,22 @@ async def handle_client_photo(message: Message, worker_bot: Bot):
         client_user_id=user.id,
         client_message_id=message.message_id,
         message_type="photo",
-        content=message.caption or "Photo"
+        content=message.caption or "Rasm"
     )
 
     targets = await get_worker_targets()
-    full_name = html.escape(user.full_name or "Anonymous")
-    username_str = f"@{user.username}" if user.username else "No username"
+    full_name = html.escape(user.full_name or "Anonim")
+    username_str = f"@{user.username}" if user.username else "Username yo'q"
 
     caption = (
-        f"📷 <b>New Photo from Client</b>\n"
-        f"👤 <b>Name:</b> {full_name}\n"
-        f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
+        f"📷 <b>Mijozdan yangi rasm</b>\n"
+        f"👤 <b>Ism:</b> {full_name}\n"
+        f"🆔 <b>Mijoz ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
+        f"📌 <b>Holat:</b> ⏳ <i>Javob berilmagan</i>"
     )
     if message.caption:
-        caption += f"\n\n💬 <b>Caption:</b>\n{html.escape(message.caption)}"
+        caption += f"\n\n💬 <b>Izoh:</b>\n{html.escape(message.caption)}"
 
     kb = get_worker_reply_keyboard(user.id)
 
@@ -240,7 +240,7 @@ async def handle_client_photo(message: Message, worker_bot: Bot):
         except Exception as e:
             logger.error(f"Failed to forward photo to worker chat {chat_id}: {e}")
 
-    await message.answer("✅ Your photo has been received. A specialist will review it.")
+    await message.answer("✅ Rasmingiz qabul qilindi. Mutaxassis ko'rib chiqadi.")
 
 
 @client_router.message(F.document)
@@ -262,23 +262,23 @@ async def handle_client_document(message: Message, worker_bot: Bot):
         client_user_id=user.id,
         client_message_id=message.message_id,
         message_type="document",
-        content=f"Document: {doc.file_name or 'unnamed'}"
+        content=f"Hujjat: {doc.file_name or 'nomsiz'}"
     )
 
     targets = await get_worker_targets()
-    full_name = html.escape(user.full_name or "Anonymous")
-    username_str = f"@{user.username}" if user.username else "No username"
+    full_name = html.escape(user.full_name or "Anonim")
+    username_str = f"@{user.username}" if user.username else "Username yo'q"
 
     caption = (
-        f"📄 <b>New Document from Client</b>\n"
-        f"👤 <b>Name:</b> {full_name}\n"
-        f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
+        f"📄 <b>Mijozdan yangi hujjat</b>\n"
+        f"👤 <b>Ism:</b> {full_name}\n"
+        f"🆔 <b>Mijoz ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"📁 <b>File:</b> {doc.file_name or 'unnamed'}\n"
-        f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
+        f"📁 <b>Fayl:</b> {doc.file_name or 'nomsiz'}\n"
+        f"📌 <b>Holat:</b> ⏳ <i>Javob berilmagan</i>"
     )
     if message.caption:
-        caption += f"\n\n💬 <b>Caption:</b>\n{html.escape(message.caption)}"
+        caption += f"\n\n💬 <b>Izoh:</b>\n{html.escape(message.caption)}"
 
     kb = get_worker_reply_keyboard(user.id)
 
@@ -305,4 +305,4 @@ async def handle_client_document(message: Message, worker_bot: Bot):
         except Exception as e:
             logger.error(f"Failed to forward document to worker chat {chat_id}: {e}")
 
-    await message.answer("✅ Your document has been received.")
+    await message.answer("✅ Hujjatingiz qabul qilindi.")
