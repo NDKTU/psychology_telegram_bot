@@ -11,8 +11,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-psychology_bot}
-    ports:
-      - "5432:5432"
+    # Порт наружу не публикуем: боты ходят к БД по внутренней сети compose,
+    # а на хосте 5432 уже занят другим стеком.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
