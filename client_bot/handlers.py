@@ -28,17 +28,11 @@ def get_worker_reply_keyboard(client_id: int) -> InlineKeyboardMarkup:
 
 
 async def get_worker_targets() -> List[int]:
-    """Get list of chats/users where worker bot should deliver messages."""
-    targets = []
-    if settings.WORKER_CHAT_ID and settings.WORKER_CHAT_ID != 0:
-        targets.append(settings.WORKER_CHAT_ID)
-    
-    # Also include any individually registered active workers
+    """Get list of active logged-in workers to deliver client inquiries to."""
     workers = await db.get_active_workers()
-    for w in workers:
-        if w not in targets:
-            targets.append(w)
-            
+    targets = list(workers)
+    if settings.WORKER_CHAT_ID and settings.WORKER_CHAT_ID != 0 and settings.WORKER_CHAT_ID not in targets:
+        targets.append(settings.WORKER_CHAT_ID)
     return targets
 
 
@@ -78,7 +72,6 @@ async def handle_client_text(message: Message, worker_bot: Bot):
         last_name=user.last_name
     )
 
-    # Save to database with status='not_answered'
     db_msg_id = await db.save_client_message(
         client_user_id=user.id,
         client_message_id=message.message_id,
@@ -88,7 +81,7 @@ async def handle_client_text(message: Message, worker_bot: Bot):
 
     targets = await get_worker_targets()
     if not targets:
-        logger.warning("No worker targets configured or registered to receive messages!")
+        logger.warning("No workers currently logged in to receive messages!")
 
     username_str = f"@{user.username}" if user.username else "No username"
     full_name = html.escape(user.full_name or "Anonymous")
@@ -97,7 +90,6 @@ async def handle_client_text(message: Message, worker_bot: Bot):
         f"📩 <b>New message from Client</b>\n"
         f"👤 <b>Name:</b> {full_name}\n"
         f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
-        f"🔗 <b>Username:</b> {username_str}\n\n"
         f"🔗 <b>Username:</b> {username_str}\n"
         f"📌 <b>Status:</b> ⏳ <i>Not answered</i>\n\n"
         f"💬 <b>Message:</b>\n{html.escape(message.text)}"
@@ -105,9 +97,6 @@ async def handle_client_text(message: Message, worker_bot: Bot):
 
     kb = get_worker_reply_keyboard(user.id)
 
-    # Deliver to workers
-    delivered = False
-    # Deliver to workers and link worker message ID
     for chat_id in targets:
         try:
             sent_msg = await worker_bot.send_message(
@@ -115,7 +104,6 @@ async def handle_client_text(message: Message, worker_bot: Bot):
                 text=worker_msg_text,
                 reply_markup=kb
             )
-            await db.save_message_mapping(
             await db.link_worker_message(
                 db_message_id=db_msg_id,
                 worker_chat_id=chat_id,
@@ -123,11 +111,9 @@ async def handle_client_text(message: Message, worker_bot: Bot):
                 client_user_id=user.id,
                 client_message_id=message.message_id
             )
-            delivered = True
         except Exception as e:
             logger.error(f"Failed to deliver message to worker chat {chat_id}: {e}")
 
-    # Acknowledge to client
     await message.answer("✅ Your message has been received. A specialist will answer you soon.")
 
 
@@ -161,12 +147,10 @@ async def handle_client_voice(message: Message, worker_bot: Bot):
         f"👤 <b>Name:</b> {full_name}\n"
         f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"⏱ <b>Duration:</b> {message.voice.duration} seconds"
         f"⏱ <b>Duration:</b> {message.voice.duration} seconds\n"
         f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
     )
 
-    # Download voice from client bot to buffer
     voice_buffer = io.BytesIO()
     await message.bot.download(message.voice.file_id, destination=voice_buffer)
     voice_bytes = voice_buffer.getvalue()
@@ -182,7 +166,6 @@ async def handle_client_voice(message: Message, worker_bot: Bot):
                 caption=caption,
                 reply_markup=kb
             )
-            await db.save_message_mapping(
             await db.link_worker_message(
                 db_message_id=db_msg_id,
                 worker_chat_id=chat_id,
@@ -221,16 +204,10 @@ async def handle_client_photo(message: Message, worker_bot: Bot):
     full_name = html.escape(user.full_name or "Anonymous")
     username_str = f"@{user.username}" if user.username else "No username"
 
-    photo = message.photo[-1]
-    photo_buffer = io.BytesIO()
-    await message.bot.download(photo.file_id, destination=photo_buffer)
-    photo_bytes = photo_buffer.getvalue()
-
     caption = (
         f"📷 <b>New Photo from Client</b>\n"
         f"👤 <b>Name:</b> {full_name}\n"
         f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
-        f"🔗 <b>Username:</b> {username_str}"
         f"🔗 <b>Username:</b> {username_str}\n"
         f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
     )
@@ -253,7 +230,6 @@ async def handle_client_photo(message: Message, worker_bot: Bot):
                 caption=caption,
                 reply_markup=kb
             )
-            await db.save_message_mapping(
             await db.link_worker_message(
                 db_message_id=db_msg_id,
                 worker_chat_id=chat_id,
@@ -293,17 +269,11 @@ async def handle_client_document(message: Message, worker_bot: Bot):
     full_name = html.escape(user.full_name or "Anonymous")
     username_str = f"@{user.username}" if user.username else "No username"
 
-    doc = message.document
-    doc_buffer = io.BytesIO()
-    await message.bot.download(doc.file_id, destination=doc_buffer)
-    doc_bytes = doc_buffer.getvalue()
-
     caption = (
         f"📄 <b>New Document from Client</b>\n"
         f"👤 <b>Name:</b> {full_name}\n"
         f"🆔 <b>Client ID:</b> <code>{user.id}</code>\n"
         f"🔗 <b>Username:</b> {username_str}\n"
-        f"📁 <b>File:</b> {doc.file_name or 'unnamed'}"
         f"📁 <b>File:</b> {doc.file_name or 'unnamed'}\n"
         f"📌 <b>Status:</b> ⏳ <i>Not answered</i>"
     )
@@ -325,7 +295,6 @@ async def handle_client_document(message: Message, worker_bot: Bot):
                 caption=caption,
                 reply_markup=kb
             )
-            await db.save_message_mapping(
             await db.link_worker_message(
                 db_message_id=db_msg_id,
                 worker_chat_id=chat_id,
@@ -337,4 +306,3 @@ async def handle_client_document(message: Message, worker_bot: Bot):
             logger.error(f"Failed to forward document to worker chat {chat_id}: {e}")
 
     await message.answer("✅ Your document has been received.")
-

@@ -1,9 +1,6 @@
-import os
-from contextlib import asynccontextmanager
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Tuple, AsyncGenerator
 from typing import Optional, List, Tuple, Dict, Any
 import aiosqlite
 
@@ -18,22 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class Database:
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or settings.DATABASE_PATH
-        db_dir = Path(self.db_path).parent
-        db_dir.mkdir(parents=True, exist_ok=True)
     """
     Unified database manager supporting both PostgreSQL (via asyncpg)
     and SQLite (via aiosqlite) as a fallback.
     """
 
-    @asynccontextmanager
-    async def get_connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            yield db
     def __init__(self, db_url: Optional[str] = None, db_path: Optional[str] = None):
-        self.db_url = db_url if db_url is not None else settings.DATABASE_URL
+        if db_url is not None:
+            self.db_url = db_url
+        else:
+            self.db_url = settings.DATABASE_URL
+
         self.db_path = db_path if db_path is not None else settings.DATABASE_PATH
         self.is_postgres = bool(
             self.db_url and (
@@ -62,8 +54,83 @@ class Database:
             self.pg_pool = None
 
     async def init_db(self) -> None:
-        """Create tables if they do not exist."""
-        async with self.get_connection() as db:
+        """Create tables in PostgreSQL or SQLite."""
+        if self.is_postgres:
+            try:
+                pool = await self.get_pg_pool()
+                async with pool.acquire() as conn:
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS clients (
+                            user_id BIGINT PRIMARY KEY,
+                            username TEXT,
+                            first_name TEXT,
+                            last_name TEXT,
+                            created_at TIMESTAMPTZ DEFAULT NOW(),
+                            last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                            status TEXT DEFAULT 'active'
+                        );
+
+                        CREATE TABLE IF NOT EXISTS workers (
+                            user_id BIGINT PRIMARY KEY,
+                            username TEXT,
+                            first_name TEXT,
+                            is_active INT DEFAULT 1,
+                            registered_at TIMESTAMPTZ DEFAULT NOW()
+                        );
+
+                        CREATE TABLE IF NOT EXISTS messages (
+                            id BIGSERIAL PRIMARY KEY,
+                            client_user_id BIGINT NOT NULL,
+                            client_message_id INT NOT NULL,
+                            worker_chat_id BIGINT,
+                            worker_message_id INT,
+                            message_type VARCHAR(32) NOT NULL,
+                            content TEXT,
+                            status VARCHAR(32) NOT NULL DEFAULT 'not_answered',
+                            answered_by BIGINT,
+                            answer_text TEXT,
+                            answered_at TIMESTAMPTZ,
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_pg_msg_status 
+                        ON messages (status, created_at);
+
+                        CREATE TABLE IF NOT EXISTS message_mappings (
+                            id BIGSERIAL PRIMARY KEY,
+                            db_message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                            worker_chat_id BIGINT NOT NULL,
+                            worker_message_id INT NOT NULL,
+                            client_user_id BIGINT NOT NULL,
+                            client_message_id INT NOT NULL,
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_pg_worker_msg 
+                        ON message_mappings (worker_chat_id, worker_message_id);
+
+                        CREATE TABLE IF NOT EXISTS active_sessions (
+                            worker_chat_id BIGINT PRIMARY KEY,
+                            client_user_id BIGINT NOT NULL,
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
+                        );
+                    """)
+                logger.info("Connected to PostgreSQL and initialized tables.")
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Could not connect to PostgreSQL ({e}). Falling back to SQLite at {self.db_path}."
+                )
+                self.is_postgres = False
+                if self.pg_pool is not None:
+                    await self.pg_pool.close()
+                    self.pg_pool = None
+
+        db_dir = Path(self.db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
             await db.execute("PRAGMA journal_mode=WAL;")
             await db.execute("PRAGMA busy_timeout=5000;")
             await db.execute("""
@@ -77,22 +144,6 @@ class Database:
                     status TEXT DEFAULT 'active'
                 )
             """)
-        """Create tables in PostgreSQL or SQLite."""
-        if self.is_postgres:
-            try:
-                pool = await self.get_pg_pool()
-                async with pool.acquire() as conn:
-                    await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS clients (
-                        user_id BIGINT PRIMARY KEY,
-                        username TEXT,
-                        first_name TEXT,
-                        last_name TEXT,
-                        created_at TIMESTAMPTZ DEFAULT NOW(),
-                        last_seen_at TIMESTAMPTZ DEFAULT NOW(),
-                        status TEXT DEFAULT 'active'
-                    );
-
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS workers (
                     user_id INTEGER PRIMARY KEY,
@@ -102,17 +153,30 @@ class Database:
                     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-                    CREATE TABLE IF NOT EXISTS workers (
-                        user_id BIGINT PRIMARY KEY,
-                        username TEXT,
-                        first_name TEXT,
-                        is_active INT DEFAULT 1,
-                        registered_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_user_id INTEGER NOT NULL,
+                    client_message_id INTEGER NOT NULL,
+                    worker_chat_id INTEGER,
+                    worker_message_id INTEGER,
+                    message_type TEXT NOT NULL,
+                    content TEXT,
+                    status TEXT NOT NULL DEFAULT 'not_answered',
+                    answered_by INTEGER,
+                    answer_text TEXT,
+                    answered_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_msg_status 
+                ON messages (status, created_at)
+            """)
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS message_mappings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    db_message_id INTEGER,
                     worker_chat_id INTEGER NOT NULL,
                     worker_message_id INTEGER NOT NULL,
                     client_user_id INTEGER NOT NULL,
@@ -120,137 +184,18 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id BIGSERIAL PRIMARY KEY,
-                        client_user_id BIGINT NOT NULL,
-                        client_message_id INT NOT NULL,
-                        worker_chat_id BIGINT,
-                        worker_message_id INT,
-                        message_type VARCHAR(32) NOT NULL,
-                        content TEXT,
-                        status VARCHAR(32) NOT NULL DEFAULT 'not_answered',
-                        answered_by BIGINT,
-                        answer_text TEXT,
-                        answered_at TIMESTAMPTZ,
-                        created_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-
-            # Index for fast lookup when a worker replies to a forwarded message
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_worker_msg 
                 ON message_mappings (worker_chat_id, worker_message_id)
             """)
-                    CREATE INDEX IF NOT EXISTS idx_pg_msg_status 
-                    ON messages (status, created_at);
-
-            # Table to track latest active client conversation for direct worker chats
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
                     worker_chat_id INTEGER PRIMARY KEY,
                     client_user_id INTEGER NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    CREATE TABLE IF NOT EXISTS message_mappings (
-                        id BIGSERIAL PRIMARY KEY,
-                        db_message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
-                        worker_chat_id BIGINT NOT NULL,
-                        worker_message_id INT NOT NULL,
-                        client_user_id BIGINT NOT NULL,
-                        client_message_id INT NOT NULL,
-                        created_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_pg_worker_msg 
-                    ON message_mappings (worker_chat_id, worker_message_id);
-
-                    CREATE TABLE IF NOT EXISTS active_sessions (
-                        worker_chat_id BIGINT PRIMARY KEY,
-                        client_user_id BIGINT NOT NULL,
-                        updated_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-                """)
-                logger.info("Connected to PostgreSQL and initialized tables.")
-                return
-            except Exception as e:
-                logger.warning(
-                    f"Could not connect to PostgreSQL ({e}). Falling back to SQLite at {self.db_path}."
                 )
             """)
-                self.is_postgres = False
-                if self.pg_pool is not None:
-                    await self.pg_pool.close()
-                    self.pg_pool = None
-
             await db.commit()
-        db_dir = Path(self.db_path).parent
-        db_dir.mkdir(parents=True, exist_ok=True)
-
-        async with aiosqlite.connect(self.db_path) as db:
-                db.row_factory = aiosqlite.Row
-                await db.execute("PRAGMA journal_mode=WAL;")
-                await db.execute("PRAGMA busy_timeout=5000;")
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS clients (
-                        user_id INTEGER PRIMARY KEY,
-                        username TEXT,
-                        first_name TEXT,
-                        last_name TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        status TEXT DEFAULT 'active'
-                    )
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS workers (
-                        user_id INTEGER PRIMARY KEY,
-                        username TEXT,
-                        first_name TEXT,
-                        is_active INTEGER DEFAULT 1,
-                        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        client_user_id INTEGER NOT NULL,
-                        client_message_id INTEGER NOT NULL,
-                        worker_chat_id INTEGER,
-                        worker_message_id INTEGER,
-                        message_type TEXT NOT NULL,
-                        content TEXT,
-                        status TEXT NOT NULL DEFAULT 'not_answered',
-                        answered_by INTEGER,
-                        answer_text TEXT,
-                        answered_at TIMESTAMP,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                await db.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_msg_status 
-                    ON messages (status, created_at)
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS message_mappings (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        db_message_id INTEGER,
-                        worker_chat_id INTEGER NOT NULL,
-                        worker_message_id INTEGER NOT NULL,
-                        client_user_id INTEGER NOT NULL,
-                        client_message_id INTEGER NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                await db.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_worker_msg 
-                    ON message_mappings (worker_chat_id, worker_message_id)
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS active_sessions (
-                        worker_chat_id INTEGER PRIMARY KEY,
-                        client_user_id INTEGER NOT NULL,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                await db.commit()
 
     async def upsert_client(
         self,
@@ -261,17 +206,6 @@ class Database:
     ) -> None:
         """Add or update client information."""
         now = datetime.now(timezone.utc).isoformat()
-        async with self.get_connection() as db:
-            await db.execute("""
-                INSERT INTO clients (user_id, username, first_name, last_name, created_at, last_seen_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    username = excluded.username,
-                    first_name = excluded.first_name,
-                    last_name = excluded.last_name,
-                    last_seen_at = excluded.last_seen_at
-            """, (user_id, username, first_name, last_name, now, now))
-            await db.commit()
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -303,18 +237,8 @@ class Database:
         username: Optional[str] = None,
         first_name: Optional[str] = None,
     ) -> None:
-        """Register an authorized worker."""
+        """Register an authorized worker (logs them in)."""
         now = datetime.now(timezone.utc).isoformat()
-        async with self.get_connection() as db:
-            await db.execute("""
-                INSERT INTO workers (user_id, username, first_name, is_active, registered_at)
-                VALUES (?, ?, ?, 1, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    username = excluded.username,
-                    first_name = excluded.first_name,
-                    is_active = 1
-            """, (user_id, username, first_name, now))
-            await db.commit()
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -338,15 +262,25 @@ class Database:
                 """, (user_id, username, first_name, now))
                 await db.commit()
 
+    async def logout_worker(self, user_id: int) -> None:
+        """Log out an authorized worker."""
+        if self.is_postgres:
+            pool = await self.get_pg_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE workers SET is_active = 0 WHERE user_id = $1;",
+                    user_id
+                )
+        else:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    "UPDATE workers SET is_active = 0 WHERE user_id = ?",
+                    (user_id,)
+                )
+                await db.commit()
+
     async def is_worker(self, user_id: int) -> bool:
-        """Check if a user is an authorized worker."""
-        async with self.get_connection() as db:
-            cursor = await db.execute(
-                "SELECT 1 FROM workers WHERE user_id = ? AND is_active = 1",
-                (user_id,)
-            )
-            row = await cursor.fetchone()
-            return row is not None
+        """Check if a user is an authorized active worker."""
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -365,11 +299,7 @@ class Database:
                 return row is not None
 
     async def get_active_workers(self) -> List[int]:
-        """Return a list of user IDs for all active workers."""
-        async with self.get_connection() as db:
-            cursor = await db.execute("SELECT user_id FROM workers WHERE is_active = 1")
-            rows = await cursor.fetchall()
-            return [row["user_id"] for row in rows]
+        """Return a list of user IDs for all logged-in active workers."""
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -382,7 +312,6 @@ class Database:
                 rows = await cursor.fetchall()
                 return [row["user_id"] for row in rows]
 
-    async def save_message_mapping(
     async def save_client_message(
         self,
         client_user_id: int,
@@ -425,17 +354,10 @@ class Database:
         client_user_id: int,
         client_message_id: int,
     ) -> None:
-        """Link a message in worker_bot to a client message."""
         """
         Link a message in worker_bot to the database record and active session.
         """
         now = datetime.now(timezone.utc).isoformat()
-        async with self.get_connection() as db:
-            await db.execute("""
-                INSERT INTO message_mappings 
-                (worker_chat_id, worker_message_id, client_user_id, client_message_id, created_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (worker_chat_id, worker_message_id, client_user_id, client_message_id, now))
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -445,14 +367,6 @@ class Database:
                     WHERE id = $3;
                 """, worker_chat_id, worker_message_id, db_message_id)
 
-            # Also update the active session for this worker chat
-            await db.execute("""
-                INSERT INTO active_sessions (worker_chat_id, client_user_id, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(worker_chat_id) DO UPDATE SET
-                    client_user_id = excluded.client_user_id,
-                    updated_at = excluded.updated_at
-            """, (worker_chat_id, client_user_id, now))
                 await conn.execute("""
                     INSERT INTO message_mappings (
                         db_message_id, worker_chat_id, worker_message_id, client_user_id, client_message_id
@@ -460,7 +374,6 @@ class Database:
                     VALUES ($1, $2, $3, $4, $5);
                 """, db_message_id, worker_chat_id, worker_message_id, client_user_id, client_message_id)
 
-            await db.commit()
                 await conn.execute("""
                     INSERT INTO active_sessions (worker_chat_id, client_user_id, updated_at)
                     VALUES ($1, $2, NOW())
@@ -497,24 +410,10 @@ class Database:
         self,
         worker_chat_id: int,
         worker_message_id: int,
-    ) -> Optional[Tuple[int, int]]:
     ) -> Optional[Tuple[int, int, Optional[int]]]:
         """
-        Find client_user_id and client_message_id by worker message reply.
-        Returns (client_user_id, client_message_id) or None.
         Find (client_user_id, client_message_id, db_message_id) by worker message.
         """
-        async with self.get_connection() as db:
-            cursor = await db.execute("""
-                SELECT client_user_id, client_message_id
-                FROM message_mappings
-                WHERE worker_chat_id = ? AND worker_message_id = ?
-                ORDER BY id DESC LIMIT 1
-            """, (worker_chat_id, worker_message_id))
-            row = await cursor.fetchone()
-            if row:
-                return (row["client_user_id"], row["client_message_id"])
-            return None
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:
@@ -566,7 +465,6 @@ class Database:
                         WHERE id = $3;
                     """, worker_user_id, answer_text, db_message_id)
                 elif client_user_id:
-                    # Mark the latest unanswered message for this client
                     await conn.execute("""
                         UPDATE messages 
                         SET status = 'answered',
@@ -639,15 +537,6 @@ class Database:
 
     async def get_active_client_for_worker(self, worker_chat_id: int) -> Optional[int]:
         """Get the client_user_id from the latest active session for this worker chat."""
-        async with self.get_connection() as db:
-            cursor = await db.execute("""
-                SELECT client_user_id FROM active_sessions
-                WHERE worker_chat_id = ?
-            """, (worker_chat_id,))
-            row = await cursor.fetchone()
-            if row:
-                return row["client_user_id"]
-            return None
         if self.is_postgres:
             pool = await self.get_pg_pool()
             async with pool.acquire() as conn:

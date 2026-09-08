@@ -60,28 +60,20 @@ CLIENT_BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
 # 2. Token for worker_bot
 WORKER_BOT_TOKEN=987654321:ZYXwvuTsRQPonMLkJIhGfeDCBA
 
-# 3. Target Chat ID for Workers (Optional)
-#    - If set to a group ID (e.g. -1001234567890), all incoming client messages
-#      will be posted in that group for any psychologist to answer.
-#    - If set to 0, workers can register in worker_bot by sending /start.
-WORKER_CHAT_ID=0
+# 3. Specialist / Admin Login & Password
+#    Workers enter these in worker_bot to authorize and receive client messages
+ADMIN_LOGIN=admin
+ADMIN_PASSWORD=admin12345
 
-# 4. Secret password for workers to register in private chat with worker_bot
-WORKER_SECRET_KEY=psychology_worker_secret_2026
-
-# 5. Database path (optional, defaults to local SQLite)
-# 5. PostgreSQL Database Settings (used automatically in Docker Compose)
+# 4. PostgreSQL Database Settings (used automatically in Docker Compose)
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=psychology_bot
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/psychology_bot
 
-# 6. Fallback SQLite path (used when running standalone without Docker)
+# 5. Fallback SQLite path (used when running standalone without Docker)
 DATABASE_PATH=data/bot.db
 ```
-
-> **Tip to find your Group or User ID for `WORKER_CHAT_ID`:**
-> Add `@my_psy_worker_bot` to your group and send `/chatid`. The bot will display the exact ID (e.g. `-1001234567890`).
 
 ---
 
@@ -144,13 +136,19 @@ python run_worker.py
 
 ## 💬 How It Works
 
-1. **Client Interaction**:
-   - A user opens `client_bot` and presses `/start`.
-   - The user sends a text message, voice message, photo, or document.
+1. **Specialist Login in `worker_bot`**:
+   - Open `worker_bot` and press `/start`.
+   - The bot prompts for your **Admin Login** and **Password** (or send `/login admin admin12345`).
+   - Once logged in, your account is active and will immediately receive all incoming client messages!
+   - To finish a shift and stop receiving messages, send `/logout`.
+
+2. **Client Interaction**:
+   - A client opens `client_bot` and presses `/start`.
+   - The client sends a text message, voice note, photo, or document.
    - The bot acknowledges receipt: `✅ Your message has been received. A specialist will answer you soon.`
 
-2. **Specialist Notification**:
-   - The incoming inquiry appears in `worker_bot` (in the worker group or private chat):
+3. **Specialist Notification**:
+   - The inquiry is delivered directly to all logged-in specialists in `worker_bot`:
      ```text
      📩 New message from Client
      👤 Name: John Doe

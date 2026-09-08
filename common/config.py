@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env if present
@@ -14,14 +13,14 @@ class Settings:
 
     CLIENT_BOT_TOKEN: str = os.getenv("CLIENT_BOT_TOKEN", "YOUR_CLIENT_BOT_TOKEN_HERE").strip()
     WORKER_BOT_TOKEN: str = os.getenv("WORKER_BOT_TOKEN", "YOUR_WORKER_BOT_TOKEN_HERE").strip()
-    
-    # Target chat ID for worker messages (can be a group ID e.g. -100xxx or worker user ID)
+
+    # Admin / Specialist credentials for worker_bot login
+    ADMIN_LOGIN: str = os.getenv("ADMIN_LOGIN", "admin").strip()
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin12345").strip()
+
+    # Optional group chat ID (optional fallback, 0 by default)
     WORKER_CHAT_ID: int = int(os.getenv("WORKER_CHAT_ID", "0"))
 
-    # Passcode for workers to register via private chat (/start <secret>)
-    WORKER_SECRET_KEY: str = os.getenv("WORKER_SECRET_KEY", "psychology_worker_secret_2026").strip()
-
-    # SQLite Database location
     # PostgreSQL Database URL
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
@@ -45,4 +44,3 @@ class Settings:
 
 
 settings = Settings()
-
